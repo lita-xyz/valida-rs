@@ -7,6 +7,7 @@ edition = "2021"
 radium = { git = "https://github.com/lita-xyz/ferrilab.git", branch = "radium-0.7.0-delendum" }
 cc = { git = "https://github.com/lita-xyz/cc-rs.git", branch = "1.1.18-delendum" }
 blst = { git = "https://github.com/lita-xyz/blst.git", branch = "0.3.13-delendum" }
+c-kzg = { git = "https://github.com/lita-xyz/c-kzg-4844.git", branch = "1.0.3-delendum" }
 
 [dependencies]
 rand = "0.8.5"
