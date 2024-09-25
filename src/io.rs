@@ -1,3 +1,4 @@
+use bincode::Options;
 use serde::{de::DeserializeOwned, Serialize};
 use std::error::Error;
 
@@ -39,13 +40,17 @@ pub fn read<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> {
     // Now read the actual bytes relating to the serialized object.
     let bytes = read_n(n)?;
     // Deserialize the object.
-    bincode::deserialize(&bytes).map_err(|e| Box::new(e) as Box<dyn Error>)
+    bincode::options()
+        .with_big_endian()
+        .deserialize(&bytes).map_err(|e| Box::new(e) as Box<dyn Error>)
 }
 
 /// Serialize an object and write it to the output tape.
 pub fn write<T: Serialize>(value: &T) -> Result<(), Box<dyn Error>> {
     // Serialize the object to discover how many bytes it will take.
-    let bytes = bincode::serialize(value)?;
+    let bytes = bincode::options()
+        .with_big_endian()
+        .serialize(value)?;
     // Write an integer specifying the number of bytes used for the serialized object, plus a
     // newline.
     let mut n = bytes.len().to_string().into_bytes();
