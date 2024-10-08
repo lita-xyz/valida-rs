@@ -37,6 +37,7 @@ pub fn read<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> {
     // up on the input tape.
     // let n: usize = std::str::from_utf8(&[unsafe { getchar() as u8 }])?.parse()?;
     // Now read the actual bytes relating to the serialized object.
+    println!("reading 32 bytes");
     let bytes = read_n(32)?;
     // Deserialize the object.
     bincode::deserialize(&bytes).map_err(|e| Box::new(e) as Box<dyn Error>)
