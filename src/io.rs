@@ -35,9 +35,9 @@ pub fn write_vec(v: &Vec<u8>) -> Result<(), Box<dyn Error>> {
 pub fn read<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> {
     // First line should be an integer specifying how many characters the serialized object takes
     // up on the input tape.
-    let n: usize = std::str::from_utf8(&[unsafe { getchar() as u8 }])?.parse()?;
+    // let n: usize = std::str::from_utf8(&[unsafe { getchar() as u8 }])?.parse()?;
     // Now read the actual bytes relating to the serialized object.
-    let bytes = read_n(n)?;
+    let bytes = read_n(32)?;
     // Deserialize the object.
     bincode::deserialize(&bytes).map_err(|e| Box::new(e) as Box<dyn Error>)
 }
