@@ -36,9 +36,31 @@ pub fn write_vec(v: &Vec<u8>) -> Result<(), Box<dyn Error>> {
 pub fn read<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> {
     // First line should be an integer specifying how many characters the serialized object takes
     // up on the input tape.
-    let n: usize = std::str::from_utf8(&read_until('\n' as u8)?)?.parse()?;
+    let n: usize = match read_until('\n' as u8) {
+        Ok(bytes) => match std::str::from_utf8(&bytes) {
+            Ok(s) => match s.parse() {
+                Ok(num) => num,
+                Err(_) => {
+                    return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to parse input as usize")));
+                }
+            },
+            Err(_) => {
+                return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to convert input to UTF-8")));
+            }
+        },
+        Err(_) => {
+            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to read input")));
+        }
+    };
+    
     // Now read the actual bytes relating to the serialized object.
-    let bytes = read_n(n)?;
+    let bytes = match read_n(n) {
+        Ok(b) => b,
+        Err(_) => {
+            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to read {} bytes", n))));
+        }
+    };
+
     // Deserialize the object.
     bincode::options()
         .with_big_endian()
