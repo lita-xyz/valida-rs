@@ -41,17 +41,14 @@ pub fn read<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> {
             Ok(s) => match s.parse() {
                 Ok(num) => num,
                 Err(_) => {
-                    println!("Failed to parse input as usize");
                     return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to parse input as usize")));
                 }
             },
             Err(_) => {
-                println!("Failed to convert input to UTF-8");
                 return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to convert input to UTF-8")));
             }
         },
         Err(_) => {
-            println!("Failed to read input");
             return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to read input")));
         }
     };
@@ -60,7 +57,6 @@ pub fn read<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> {
     let bytes = match read_n(n) {
         Ok(b) => b,
         Err(_) => {
-            println!("Failed to read {} bytes", n);
             return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to read {} bytes", n))));
         }
     };
