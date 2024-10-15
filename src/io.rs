@@ -7,6 +7,14 @@ extern "C" {
     pub fn putchar(c: u32) -> u32;
 }
 
+/// Mimic std::io::println
+pub fn println(s: &str) {
+    let length = s.len();
+    let bytes = s.as_bytes();
+    (0..length).for_each(|i| unsafe { putchar(bytes[i] as u32); });
+    unsafe { putchar('\n' as u32) };
+}
+
 /// Read from the input tape until we hit a specific character.
 pub fn read_until(c: u8) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut result = Vec::new();
