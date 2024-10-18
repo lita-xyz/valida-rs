@@ -44,23 +44,23 @@ pub fn write_vec(v: &Vec<u8>) -> Result<(), Box<dyn Error>> {
 pub fn read<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> {
     // First line should be an integer specifying how many characters the serialized object takes
     // up on the input tape.
-    let n: usize = match read_until('\n' as u8) {
-        Ok(bytes) => match std::str::from_utf8(&bytes) {
-            Ok(s) => match s.parse() {
-                Ok(num) => num,
-                Err(_) => {
-                    return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to parse input as usize")));
-                }
-            },
-            Err(_) => {
-                return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to convert input to UTF-8")));
-            }
-        },
-        Err(_) => {
-            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to read input")));
-        }
-    };
-    
+    // let n: usize = match read_until('\n' as u8) {
+    //     Ok(bytes) => match std::str::from_utf8(&bytes) {
+    //         Ok(s) => match s.parse() {
+    //             Ok(num) => num,
+    //             Err(_) => {
+    //                 return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to parse input as usize")));
+    //             }
+    //         },
+    //         Err(_) => {
+    //             return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to convert input to UTF-8")));
+    //         }
+    //     },
+    //     Err(_) => {
+    //         return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to read input")));
+    //     }
+    // };
+    let n = 83;
     // Now read the actual bytes relating to the serialized object.
     let bytes = match read_n(n) {
         Ok(b) => b,
@@ -71,8 +71,14 @@ pub fn read<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> {
 
     // Deserialize the object.
     bincode::options()
+        .with_fixint_encoding()
         .with_big_endian()
-        .deserialize(&bytes).map_err(|e| Box::new(e) as Box<dyn Error>)
+        .deserialize(&bytes)
+        .map_err(|e| {
+            println(&e.to_string());
+            println(String::from_utf8_lossy(&bytes).as_ref());
+            Box::new(std::io::Error::new(std::io::ErrorKind::Other, e.to_string())) as Box<dyn Error>
+        })
 }
 
 /// Serialize an object and write it to the output tape.
