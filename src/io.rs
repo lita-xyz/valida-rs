@@ -15,6 +15,33 @@ pub fn println(s: &str) {
     unsafe { putchar('\n' as u32) };
 }
 
+/// Reads a single line of input from stdin and returns it as a u8.
+pub fn read_line_u8() -> Result<u8, Box<dyn Error>> {
+    let input = read_until(b'\n');
+    let byte: u8 = match input {
+        Ok(byte) => {
+            match std::str::from_utf8(&byte) {
+                Ok(s) => match s.trim().parse() {
+                    Ok(num) => num,
+                    Err(_) => {
+                        println("Failed to parse to an u8");
+                        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Failed to parse to an u8")));
+                    },
+                },
+                Err(e) => {
+                    println(&format!("Failed to parse input as u8: {}", e));
+                    return Err(Box::new(e));
+                },
+            }
+        },
+        Err(_) => {
+            println("Failed to read input");
+            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to read input")));
+        },
+    };
+    Ok(byte)
+}
+
 /// Read from the input tape until we hit a specific character.
 pub fn read_until(c: u8) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut result = Vec::new();
