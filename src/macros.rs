@@ -4,8 +4,8 @@ macro_rules! entrypoint {
         const DELENDUM_ENTRY: fn() = $path;
 
         mod delendum_generated_main {
-            use entrypoint::rand::delendum_rand;
-            use getrandom::register_custom_getrandom;
+            use $crate::rand::delendum_rand;
+            use $crate::getrandom::register_custom_getrandom;
 
             register_custom_getrandom!(delendum_rand);
 
