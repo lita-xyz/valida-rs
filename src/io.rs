@@ -14,32 +14,21 @@ pub fn println(s: &str) {
     (0..length).for_each(|i| unsafe { putchar(bytes[i] as u32); });
     unsafe { putchar('\n' as u32) };
 }
-
-/// Reads a single line of input from stdin and returns it as a u8.
-pub fn read_line_u8() -> Result<u8, Box<dyn Error>> {
-    let input = read_until(b'\n');
-    let byte: u8 = match input {
-        Ok(byte) => {
-            match std::str::from_utf8(&byte) {
-                Ok(s) => match s.trim().parse() {
-                    Ok(num) => num,
-                    Err(_) => {
-                        println("Failed to parse to an u8");
-                        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Failed to parse to an u8")));
-                    },
-                },
-                Err(e) => {
-                    println(&format!("Failed to parse input as u8: {}", e));
-                    return Err(Box::new(e));
-                },
-            }
-        },
-        Err(_) => {
-            println("Failed to read input");
-            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "Failed to read input")));
-        },
-    };
-    Ok(byte)
+/// Reads a single line of input from stdin and returns it as a generic type T.
+pub fn read_line<T>() -> Result<T, Box<dyn Error>>
+where
+    T: std::str::FromStr,
+    <T as std::str::FromStr>::Err: std::error::Error + 'static
+{
+    let input = read_until(b'\n')?;
+    let trimmed = std::str::from_utf8(&input)?.trim();
+    match trimmed.parse() {
+        Ok(value) => Ok(value),
+        Err(e) => {
+            println(&format!("Failed to parse input: {}", e));
+            Err(Box::new(e))
+        }
+    }
 }
 
 /// Read from the input tape until we hit a specific character.
