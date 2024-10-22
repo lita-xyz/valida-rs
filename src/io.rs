@@ -25,7 +25,6 @@ where
     match trimmed.parse() {
         Ok(value) => Ok(value),
         Err(e) => {
-            println(&format!("Failed to parse input: {}", e));
             Err(Box::new(e))
         }
     }
