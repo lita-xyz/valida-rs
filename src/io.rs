@@ -14,6 +14,21 @@ pub fn println(s: &str) {
     (0..length).for_each(|i| unsafe { putchar(bytes[i] as u32); });
     unsafe { putchar('\n' as u32) };
 }
+/// Reads a single line of input from stdin and returns it as a generic type T.
+pub fn read_line<T>() -> Result<T, Box<dyn Error>>
+where
+    T: std::str::FromStr,
+    <T as std::str::FromStr>::Err: std::error::Error + 'static
+{
+    let input = read_until(b'\n')?;
+    let trimmed = std::str::from_utf8(&input)?.trim();
+    match trimmed.parse() {
+        Ok(value) => Ok(value),
+        Err(e) => {
+            Err(Box::new(e))
+        }
+    }
+}
 
 /// Read from the input tape until we hit a specific character.
 pub fn read_until(c: u8) -> Result<Vec<u8>, Box<dyn Error>> {
