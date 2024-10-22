@@ -1,3 +1,4 @@
+# Comment out this section if you want to target the host machine instead of the Valida VM
 [build]
 target = "delendum-unknown-baremetal-gnu"
 
