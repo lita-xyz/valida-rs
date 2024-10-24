@@ -126,6 +126,7 @@ pub fn read<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> {
 
     // Deserialize the object.
     bincode::options()
+        .with_fixint_encoding()
         .with_little_endian()
         .deserialize(&bytes)
         .map_err(|e| Box::new(e) as Box<dyn Error>)
@@ -134,7 +135,10 @@ pub fn read<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> {
 /// Serialize an object and write it to the output tape.
 pub fn write<T: Serialize>(value: &T) -> Result<(), Box<dyn Error>> {
     // Serialize the object to discover how many bytes it will take.
-    let bytes = bincode::options().with_little_endian().serialize(value)?;
+    let bytes = bincode::options()
+        .with_fixint_encoding()
+        .with_little_endian()
+        .serialize(value)?;
     // Write an integer specifying the number of bytes used for the serialized object, plus a
     // newline.
     let mut n = bytes.len().to_string().into_bytes();
