@@ -87,24 +87,8 @@ pub fn write_vec(v: impl AsRef<[u8]>) -> Result<(), Box<dyn Error>> {
 pub fn read<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> {
     // First line should be an integer specifying how many characters the serialized object takes
     // up on the input tape.
-    let n: usize = match read_until(b'\n') {
-        Ok(bytes) => match std::str::from_utf8(&bytes) {
-            Ok(s) => match s.parse() {
-                Ok(num) => num,
-                Err(_) => {
-                    return Err(Box::new(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Failed to parse input as usize",
-                    )));
-                }
-            },
-            Err(_) => {
-                return Err(Box::new(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    "Failed to convert input to UTF-8",
-                )));
-            }
-        },
+    let n: usize = match read_line::<usize>() {
+        Ok(num) => num,
         Err(_) => {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::Other,
