@@ -56,16 +56,21 @@ where
     }
 }
 
-/// Read from the input tape until we hit a specific character.
-pub fn read_until(c: u8) -> Result<Vec<u8>, Box<dyn Error>> {
+/// Read from the input tape until we hit EOF or a specific character.
+pub fn read_until(stop_char: u8) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut result = Vec::new();
     loop {
-        let input = unsafe { getchar() as u8 };
-        if input == c {
-            // All done, found the character to stop at.
+        let input = unsafe { getchar() as u32 };
+        if input == u32::MAX {
+            // EOF reached
             break;
         }
-        result.push(input);
+        let input_byte = input as u8;
+        if input_byte == stop_char {
+            // Found the character to stop at
+            break;
+        }
+        result.push(input_byte);
     }
     Ok(result)
 }
@@ -85,29 +90,8 @@ pub fn write_vec(v: impl AsRef<[u8]>) -> Result<(), Box<dyn Error>> {
 
 /// Construct a deserializable object from bytes read off the input tape.
 pub fn read<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> {
-    // First line should be an integer specifying how many characters the serialized object takes
-    // up on the input tape.
-    let n: usize = match read_line::<usize>() {
-        Ok(num) => num,
-        Err(_) => {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Failed to read input",
-            )));
-        }
-    };
-
-    // Now read the actual bytes relating to the serialized object.
-    let bytes = match read_n(n) {
-        Ok(b) => b,
-        Err(_) => {
-            return Err(Box::new(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Failed to read {} bytes", n),
-            )));
-        }
-    };
-
+    let bytes = read_until(u8::MAX)?;
+    
     // Deserialize the object.
     bincode::options()
         .with_fixint_encoding()
