@@ -31,6 +31,14 @@ impl OutputTape {
     }
 }
 
+pub fn print(s: &str) {
+    let length = s.len();
+    let bytes = s.as_bytes();
+    (0..length).for_each(|i| unsafe {
+        putchar(bytes[i] as u32);
+    });
+}
+
 /// Mimic std::io::println
 pub fn println(s: &str) {
     let length = s.len();
