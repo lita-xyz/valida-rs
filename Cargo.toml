@@ -1,7 +1,19 @@
+[workspace]
+
+members = [
+    ".",
+		"examples/testing",
+]
+
 [package]
 name = "valida-rs"
 version = "0.1.0"
 edition = "2021"
+
+[lib]
+
+[[test]]
+name = "valida_integration_test"
 
 [dependencies]
 rand = "0.8.5"

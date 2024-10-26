@@ -9,7 +9,7 @@ macro_rules! entrypoint {
 
             register_custom_getrandom!(valida_rand);
 
-            #[no_mangle]
+            #[cfg_attr(not(test), no_mangle)]
             fn main() {
                 super::VALIDA_ENTRY()
             }
