@@ -56,6 +56,23 @@ where
     }
 }
 
+
+/// Mimic  std::fs::read https://doc.rust-lang.org/std/fs/fn.read.html
+/// Read from the input tape until EOF and return the contents as a Vec<u8>.
+pub fn read() -> Result<Vec<u8>, Box<dyn Error>> {
+    let mut result = Vec::new();
+    loop {
+        let input = unsafe { getchar() as u32 };
+        if input == u32::MAX {
+            // EOF reached
+            break;
+        }
+        result.push(input as u8);
+    }
+    Ok(result)
+}
+
+
 /// Read from the input tape until we hit EOF or a specific character.
 pub fn read_until(stop_char: u8) -> Result<Vec<u8>, Box<dyn Error>> {
     let mut result = Vec::new();
@@ -89,8 +106,14 @@ pub fn write_vec(v: impl AsRef<[u8]>) -> Result<(), Box<dyn Error>> {
 }
 
 /// Construct a deserializable object from bytes read off the input tape.
-pub fn read<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> {
-    let bytes = read_until(u8::MAX)?;
+pub fn read_and_deserialize<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> {
+    let bytes = match read() {
+        Ok(b) => b,
+        Err(e) => {
+            println(&format!("Error reading bytes: {}", e));
+            return Err(e);
+        }
+    };
     
     // Deserialize the object.
     bincode::options()
