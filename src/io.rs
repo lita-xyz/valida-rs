@@ -44,20 +44,17 @@ pub fn println(s: &str) {
 pub fn read_line<T>() -> Result<T, Box<dyn Error>>
 where
     T: std::str::FromStr,
-    <T as std::str::FromStr>::Err: std::error::Error + 'static
+    <T as std::str::FromStr>::Err: std::error::Error + 'static,
 {
     let input = read_until(b'\n')?;
     let trimmed = std::str::from_utf8(&input)?.trim();
     match trimmed.parse() {
         Ok(value) => Ok(value),
-        Err(e) => {
-            Err(Box::new(e))
-        }
+        Err(e) => Err(Box::new(e)),
     }
 }
 
-
-/// Mimic  std::fs::read https://doc.rust-lang.org/std/fs/fn.read.html
+/// Mimic std::fs::read https://doc.rust-lang.org/std/fs/fn.read.html
 /// Read from the input tape until EOF and return the contents as a Vec<u8>.
 pub fn read() -> Result<Vec<u8>, Box<dyn Error>> {
     let mut result = Vec::new();
@@ -71,7 +68,6 @@ pub fn read() -> Result<Vec<u8>, Box<dyn Error>> {
     }
     Ok(result)
 }
-
 
 /// Read from the input tape until we hit EOF or a specific character.
 pub fn read_until(stop_char: u8) -> Result<Vec<u8>, Box<dyn Error>> {
@@ -114,7 +110,7 @@ pub fn read_and_deserialize<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> 
             return Err(e);
         }
     };
-    
+
     // Deserialize the object.
     bincode::options()
         .with_fixint_encoding()
