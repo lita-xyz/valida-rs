@@ -311,7 +311,12 @@ fn run_test_on_valida_inner(
 ) -> Result<bool, String> {
     let timestamp = std::time::UNIX_EPOCH.elapsed().unwrap().as_millis();
 
-    let mut child = Command::new("valida")
+    // Add check for valida executable
+    let valida_path = which::which("valida").map_err(|_| {
+        "Could not find 'valida' executable in PATH. Please ensure Valida is installed correctly.".to_string()
+    })?;
+
+    let mut child = Command::new(valida_path)
         .arg("run")
         .arg(test_path)
         .arg(format!("/tmp/valida-test-log-{timestamp}"))
