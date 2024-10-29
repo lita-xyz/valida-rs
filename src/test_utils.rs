@@ -45,7 +45,10 @@ fn host_runner(tests: &[&TestDescAndFn]) {
 
     let test_paths = if run_tests_on_valida {
         crate::io::println("Building tests for valida");
-        build_tests_for_valida()
+        build_tests_for_valida().unwrap_or_else(|e| {
+            eprintln!("Failed to build tests for valida: {}", e);
+            vec![]
+        })
     } else {
         vec![]
     };
@@ -207,7 +210,7 @@ fn run_test_on_host(test: &TestDescAndFn) -> TestOutcome {
 ///
 /// # Panics
 /// This function will panic if the cargo cannot build the tests.
-fn build_tests_for_valida() -> Vec<PathBuf> {
+fn build_tests_for_valida() -> Result<Vec<PathBuf>, String> {
     let mut command = Command::new("cargo");
 
     command
@@ -245,7 +248,11 @@ fn build_tests_for_valida() -> Vec<PathBuf> {
         }
     }
 
-    let output = command.spawn().unwrap().wait_with_output().unwrap();
+    let output = command
+        .spawn()
+        .map_err(|e| format!("Failed to spawn cargo: {}", e))?
+        .wait_with_output()
+        .map_err(|e| format!("Failed to get cargo output: {}", e))?;
 
     let paths = output
         .stdout
@@ -256,12 +263,12 @@ fn build_tests_for_valida() -> Vec<PathBuf> {
         .collect();
 
     if output.status.success() {
-        paths
+        Ok(paths)
     } else {
-        panic!(
+        Err(format!(
             "Failed to build tests for valida: {}",
             String::from_utf8_lossy(&output.stderr)
-        );
+        ))
     }
 }
 
