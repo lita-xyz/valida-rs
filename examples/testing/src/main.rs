@@ -6,12 +6,12 @@
 //! For integration tests or a library you will not need the entrypoint macro or no_main attributes.
 //! For a full example of integration tests see the `tests/test.rs` file.
 #![feature(custom_test_frameworks, test)]
-#![test_runner(entrypoint::test_utils::test_runner)]
+#![test_runner(valida_rs::test_utils::test_runner)]
 #![cfg_attr(not(test), no_main)]
-entrypoint::entrypoint!(main);
+valida_rs::entrypoint!(main);
 
 fn main() {
-    entrypoint::io::println("Hello world!");
+    valida_rs::io::println("Hello world!");
 }
 
 #[test]

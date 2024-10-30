@@ -6,10 +6,10 @@
 //! Set the `test_runner` attribute in the root of each crate (`lib.rs`, `main.rs`, test.rs).
 //! ```rust,ignore
 //! #![feature(custom_test_frameworks, test)]
-//! #![test_runner(entrypoint::test_utils::test_runner)]
+//! #![test_runner(valida_rs::test_utils::test_runner)]
 //! // If your testing a binary crate, you will also need to add this:
 //! #![cfg_attr(not(test), no_main)]
-//! entrypoint::entrypoint!(main);
+//! valida_rs::entrypoint!(main);
 //! ```
 //!
 //! You can run tests on only the host by setting the `VALIDA_TEST` environment variable to `0`.
