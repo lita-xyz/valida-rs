@@ -14,4 +14,4 @@ name = "test"
 path = "tests/test.rs"
 
 [dependencies]
-entrypoint = { path = "../../" }
+valida-rs = { path = "../../" }

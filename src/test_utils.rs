@@ -211,7 +211,7 @@ fn build_tests_for_valida() -> Vec<PathBuf> {
     let mut command = Command::new("cargo");
 
     command
-    .arg("+delendum")
+    .arg("+valida")
     .arg("test")
     .arg("--target=delendum-unknown-baremetal-gnu")
     .arg("--config")
