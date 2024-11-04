@@ -1,5 +1,3 @@
-use bincode::Options;
-use serde::{de::DeserializeOwned, Serialize};
 use std::{error::Error, io::Read};
 
 extern "C" {
@@ -98,40 +96,5 @@ pub fn write_vec(v: impl AsRef<[u8]>) -> Result<(), Box<dyn Error>> {
     v.as_ref().iter().for_each(|c| unsafe {
         putchar(*c as u32);
     });
-    Ok(())
-}
-
-/// Construct a deserializable object from bytes read off the input tape.
-pub fn read_and_deserialize<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> {
-    let bytes = match read() {
-        Ok(b) => b,
-        Err(e) => {
-            println(&format!("Error reading bytes: {}", e));
-            return Err(e);
-        }
-    };
-
-    // Deserialize the object.
-    bincode::options()
-        .with_fixint_encoding()
-        .with_little_endian()
-        .deserialize(&bytes)
-        .map_err(|e| Box::new(e) as Box<dyn Error>)
-}
-
-/// Serialize an object and write it to the output tape.
-pub fn write<T: Serialize>(value: &T) -> Result<(), Box<dyn Error>> {
-    // Serialize the object to discover how many bytes it will take.
-    let bytes = bincode::options()
-        .with_fixint_encoding()
-        .with_little_endian()
-        .serialize(value)?;
-    // Write an integer specifying the number of bytes used for the serialized object, plus a
-    // newline.
-    let mut n = bytes.len().to_string().into_bytes();
-    n.push(b'\n');
-    write_vec(&n)?;
-    // Write the serialized object to the output tape.
-    write_vec(&bytes)?;
     Ok(())
 }
