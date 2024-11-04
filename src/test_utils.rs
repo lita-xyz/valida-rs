@@ -3,6 +3,8 @@
 //! # Usage
 //! For a full example see the `examples/testing` directory.
 //!
+//! Make sure you have the `valida` command in your `$PATH`.
+//!
 //! Set the `test_runner` attribute in the root of each crate (`lib.rs`, `main.rs`, test.rs).
 //! ```rust,ignore
 //! #![feature(custom_test_frameworks, test)]
@@ -331,6 +333,10 @@ fn run_test_on_valida(
 /// Err if the test did not have the expected outcome.
 /// Ok(true) if the test passed.
 /// Ok(false) if the test was not found in the provided test binary.
+///
+/// # Panics
+/// If the `valida` command cannot be found in the `$PATH`.
+/// Or if the `valida` command cannot be started.
 #[cfg(not(target_arch = "delendum"))]
 fn run_test_on_valida_inner(
     test: &TestDescAndFn,
@@ -340,6 +346,8 @@ fn run_test_on_valida_inner(
     let temp_log = tempfile::NamedTempFile::new().expect("Failed to create temp log file");
     let temp_log_path = temp_log.path();
 
+    // We call try_wait() the process in a loop or kill it after a timeout, so this warning is erroneous.
+    #[allow(clippy::zombie_processes)]
     let mut child = Command::new("valida")
         .arg("run")
         .arg(test_path)
@@ -348,7 +356,10 @@ fn run_test_on_valida_inner(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("Failed to start test process: {}", e))?;
+        .map_err(|e| {
+            panic!("Are you sure `valida` is in your `$PATH`?\nFailed to start test process: {e}")
+        })
+        .unwrap();
 
     let mut valida_stdin = child.stdin.take().unwrap();
 
