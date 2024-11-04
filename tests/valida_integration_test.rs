@@ -18,5 +18,5 @@ fn test_integration_fail() {
 #[ignore]
 fn test_integration_ignore() {
     valida_rs::io::println("Running integration test ignore...");
-    assert_eq!(1 + 1, 2);
+    assert_eq!(1 + 1, 3);
 }

@@ -16,10 +16,17 @@
 //!
 //! # Caveats
 //! Testing examples, benchmarks, or any dynamic tests are not supported yet.
+
+#![allow(unexpected_cfgs)]
+
 extern crate test;
+
+// This prevents cfg(not(target_arch = "delendum")) from causing a warning.
+// It's prettier than doing it granularly.
+#[allow(unused_imports)]
 use std::{
     env,
-    io::{self, BufRead, Write},
+    io::{self, BufRead, Seek, Write},
     panic::{self, AssertUnwindSafe},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -32,10 +39,12 @@ pub fn test_runner(tests: &[&TestDescAndFn]) {
     if cfg!(target_arch = "delendum") | cfg!(target = "valida") {
         run_single_test_in_valida(tests);
     } else {
+        #[cfg(not(target_arch = "delendum"))]
         host_runner(tests);
     }
 }
 
+#[cfg(not(target_arch = "delendum"))]
 fn host_runner(tests: &[&TestDescAndFn]) {
     let run_tests_on_valida = env::var("VALIDA_TEST").map(|s| s.to_lowercase());
     let run_tests_on_valida = match run_tests_on_valida {
@@ -44,13 +53,11 @@ fn host_runner(tests: &[&TestDescAndFn]) {
     };
 
     let test_paths = if run_tests_on_valida {
-        crate::io::println("Building tests for valida");
+        println!("Building tests for valida");
         build_tests_for_valida()
     } else {
         vec![]
     };
-
-    crate::io::println("Running tests host.");
 
     let mut passed = 0;
     let mut valida_passed = 0;
@@ -75,7 +82,7 @@ fn host_runner(tests: &[&TestDescAndFn]) {
     println!("running {} tests", filtered_tests.len());
 
     for t in filtered_tests.iter() {
-        print!("test {} ... ", t.desc.name);
+        print!("test {} on native ... ", t.desc.name);
 
         if t.desc.ignore {
             println!("ignored");
@@ -89,8 +96,8 @@ fn host_runner(tests: &[&TestDescAndFn]) {
                 println!("ok");
                 passed += 1;
 
-                print!("test {} on valida ... ", t.desc.name);
                 if run_tests_on_valida {
+                    print!("test {} on valida ... ", t.desc.name);
                     match run_test_on_valida(t, &test_paths, test_time) {
                         Ok(()) => {
                             println!("ok");
@@ -106,7 +113,7 @@ fn host_runner(tests: &[&TestDescAndFn]) {
             }
             TestOutcome::Failed(msg) => {
                 println!("FAILED");
-                eprintln!("\ntest {} on host failure message: {}", t.desc.name, msg);
+                eprintln!("\ntest {} on native failure message: {}", t.desc.name, msg);
                 failed += 1;
             }
             TestOutcome::ShouldPanicButPassed => {
@@ -129,7 +136,7 @@ fn host_runner(tests: &[&TestDescAndFn]) {
             on native:      {passed} passed; {failed} failed\n\
             on valida:      {valida_passed} passed; {valida_failed} failed\n\
             {ignored} ignored;\n\
-            {unsupported} unsupported",
+            {unsupported} unsupported\n\n",
             if failed == 0 { "ok" } else { "FAILED" },
         );
     }
@@ -147,14 +154,35 @@ pub enum TestOutcome {
     Unsupported,
 }
 
+#[cfg(not(target_arch = "delendum"))]
 fn run_test_on_host(test: &TestDescAndFn) -> TestOutcome {
+    use std::os::fd::AsRawFd;
+
     match &test.testfn {
         TestFn::StaticTestFn(f) => {
             let start_time = Instant::now();
 
-            // TODO instead of catching panics, run the tests in seprate processes
-            // That would allow us to capture output by default like cargo test (see --nocapture).
+            let mut tempfile = tempfile::tempfile().expect("Failed to create tempfile");
+
+            let g1 =
+                gag::Redirect::stdout(tempfile.as_raw_fd()).expect("Failed to redirect stdout");
+            let g2 =
+                gag::Redirect::stderr(tempfile.as_raw_fd()).expect("Failed to redirect stderr");
+
             let result = panic::catch_unwind(AssertUnwindSafe(f));
+
+            drop(g1);
+            drop(g2);
+
+            let log_test_failure = move || {
+                eprintln!("\n\nTest {} failed on native, output:\n\n", test.desc.name);
+
+                tempfile.seek(std::io::SeekFrom::Start(0)).unwrap();
+                std::io::BufReader::new(tempfile)
+                    .lines()
+                    .for_each(|line| eprintln!("{}", line.expect("Failed to read line")));
+            };
+
             let duration = start_time.elapsed();
 
             match (result, &test.desc.should_panic) {
@@ -166,36 +194,40 @@ fn run_test_on_host(test: &TestDescAndFn) -> TestOutcome {
 
                 // Test panicked and was supposed to panic with specific message
                 (Err(e), ShouldPanic::YesWithMessage(msg)) => {
-                    let panic_msg = if let Some(s) = e.downcast_ref::<String>() {
-                        s.as_str()
-                    } else if let Some(s) = e.downcast_ref::<&str>() {
-                        s
-                    } else {
-                        "Unknown panic payload"
-                    };
+                    let panic_msg = e
+                        .downcast_ref::<String>()
+                        .map(|s| s.as_str())
+                        .or_else(|| e.downcast_ref::<&str>().copied());
 
-                    if panic_msg.contains(msg) {
+                    if panic_msg.map(|s| s.contains(msg)).unwrap_or(false) {
                         TestOutcome::Passed(duration)
                     } else {
+                        log_test_failure();
                         TestOutcome::Failed(format!(
                             "Expected panic message containing '{}', got '{}'",
-                            msg, panic_msg
+                            msg,
+                            panic_msg.unwrap_or("Non string panic value")
                         ))
                     }
                 }
 
                 // Test panicked but shouldn't have
-                (Err(e), ShouldPanic::No) => {
-                    TestOutcome::Failed(format!("Test panicked unexpectedly: {:?}", e))
+                (Err(_e), ShouldPanic::No) => {
+                    log_test_failure();
+                    TestOutcome::Failed("Test panicked unexpectedly".to_string())
                 }
 
                 // Test succeeded but should have panicked
                 (Ok(Ok(())), ShouldPanic::Yes | ShouldPanic::YesWithMessage(_)) => {
+                    log_test_failure();
                     TestOutcome::ShouldPanicButPassed
                 }
 
                 // Test returned Err - this means the test function itself failed
-                (Ok(Err(e)), _) => TestOutcome::Failed(format!("Test returned error: {:?}", e)),
+                (Ok(Err(_e)), _) => {
+                    log_test_failure();
+                    TestOutcome::Failed("Test returned error: {:?}".to_string())
+                }
             }
         }
 
@@ -207,6 +239,7 @@ fn run_test_on_host(test: &TestDescAndFn) -> TestOutcome {
 ///
 /// # Panics
 /// This function will panic if the cargo cannot build the tests.
+#[cfg(not(target_arch = "delendum"))]
 fn build_tests_for_valida() -> Vec<PathBuf> {
     let mut command = Command::new("cargo");
 
@@ -265,6 +298,7 @@ fn build_tests_for_valida() -> Vec<PathBuf> {
     }
 }
 
+#[cfg(not(target_arch = "delendum"))]
 fn run_test_on_valida(
     test: &TestDescAndFn,
     test_paths: &[PathBuf],
@@ -297,17 +331,19 @@ fn run_test_on_valida(
 /// Err if the test did not have the expected outcome.
 /// Ok(true) if the test passed.
 /// Ok(false) if the test was not found in the provided test binary.
+#[cfg(not(target_arch = "delendum"))]
 fn run_test_on_valida_inner(
     test: &TestDescAndFn,
     test_path: &Path,
     host_test_time: Duration,
 ) -> Result<bool, String> {
-    let timestamp = std::time::UNIX_EPOCH.elapsed().unwrap().as_millis();
+    let temp_log = tempfile::NamedTempFile::new().expect("Failed to create temp log file");
+    let temp_log_path = temp_log.path();
 
     let mut child = Command::new("valida")
         .arg("run")
         .arg(test_path)
-        .arg(format!("/tmp/valida-test-log-{timestamp}"))
+        .arg(temp_log_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
