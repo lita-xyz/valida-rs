@@ -23,9 +23,8 @@
 
 extern crate test;
 
-// This prevents cfg(not(target_arch = "delendum")) from causing a warning.
-// It's prettier than doing it granularly.
-#[allow(unused_imports)]
+use std::io::Read;
+#[cfg_attr(target_arch = "delendum", allow(unused_imports))]
 use std::{
     env,
     io::{self, BufRead, Seek, Write},
@@ -34,7 +33,12 @@ use std::{
     process::{Command, Stdio},
     time::{Duration, Instant},
 };
+#[cfg_attr(target_arch = "delendum", allow(unused_imports))]
 use test::{ShouldPanic, TestDescAndFn, TestFn};
+
+/// A random sentinel value is printed by the panic hook.
+/// This is used to detect if a test running in valida has panicked.
+pub const MAGIC_TERMINATOR: &str = "valida_rs_terminator_YMYGE2otWHIAZ5IKtvTkCnt7B/aNTisJtmkNu9/H0C2pZp7XTeGIO2RZypwus7wvKyG9f4/nwrEP1vEy+YJJqS6ulJqks25EgHbZXQIZIWVfVK+HgmFvaINl49axeKZgk2SNIDAayGhmO5a0okHc9qFzOZhDIblXdybCoVCVaZfX/5G9T4FbbX8ktLV0nLI/nns1fakApi2eHTxP/+lWlXFznl+eipFNQg9h3ZS7VX6i3EGTOYO86TJmAUyLAfqKWuQFTvNHeFFofd4nhUiek2FuI939T3L5uFc7A9oQClGmLTSaGytDNT8slxuaRvQM99ntk+CLK+X8eNVQdKh0xA";
 
 pub fn test_runner(tests: &[&TestDescAndFn]) {
     #[allow(unexpected_cfgs)]
@@ -69,7 +73,8 @@ fn host_runner(tests: &[&TestDescAndFn]) {
     let mut unsupported = 0;
 
     // Get test filter from environment variable, just like rustc does
-    let filter = env::args().nth(1);
+    let filter = env::args().skip(1).find(|arg| !arg.starts_with('-'));
+
     let filtered_tests: Vec<&&TestDescAndFn> = match &filter {
         Some(f) => tests
             .iter()
@@ -368,57 +373,105 @@ fn run_test_on_valida_inner(
     let _ = writeln!(valida_stdin, "{}", test.desc.name);
     let _ = writeln!(valida_stdin, "{}", test.desc.source_file);
 
-    let mut valida_stdout = io::BufReader::new(child.stdout.take().unwrap()).lines();
+    let mut valida_stdout = io::BufReader::new(child.stdout.take().unwrap());
 
     // contains a list of available tests
-    let first_line = valida_stdout.next();
-    // the test you selected
-    let second_line = valida_stdout.next();
-
-    match (first_line, second_line) {
-        (_first_line, Some(Ok(second_line))) => {
-            if second_line != valida_test_second_line_stdout(test) {
-                return Ok(false);
-            }
-        }
-        (Some(Err(e)), _) | (_, Some(Err(e))) => {
-            return Err(format!("Failed to read from test process: {}", e))
-        }
-        (_, None) => return Ok(false),
+    let mut first_line = String::new();
+    let Ok(_) = valida_stdout.read_line(&mut first_line) else {
+        return Err(format!(
+            "Failed to read available tests from first line of stdout for test executable {}",
+            test_path.display()
+        ));
     };
 
-    let timeout = std::cmp::max(host_test_time * 10, Duration::from_secs(10));
+    // the test you selected
+    let mut second_line = String::new();
+    let Ok(_) = valida_stdout.read_line(&mut second_line) else {
+        return Err(format!(
+            "Failed to read test name from second line of stdout for test executable {}",
+            test_path.display()
+        ));
+    };
+
+    if second_line.trim() != valida_test_second_line_stdout(test) {
+        return Ok(false);
+    }
+
+    let timeout = std::cmp::max(host_test_time * 20, Duration::from_secs(10));
     let start_time = Instant::now();
 
+    let mut stdout_buffer: Vec<u8> = Vec::with_capacity(1024);
+    let mut searched_cursor = 0;
+
     loop {
+        // Read stdout the valida child process
+        read_extend_vec(&mut stdout_buffer, &mut valida_stdout)
+            .expect("Failed to read child stdout");
+
+        let search_end = stdout_buffer
+            .len()
+            .checked_sub(MAGIC_TERMINATOR.len())
+            .unwrap_or(searched_cursor);
+
+        let paniced_with_magic_terminator = (searched_cursor..search_end)
+            .any(|i| &stdout_buffer[i..i + MAGIC_TERMINATOR.len()] == MAGIC_TERMINATOR.as_bytes());
+        searched_cursor = search_end;
+
+        if paniced_with_magic_terminator {
+            let _ = child.kill();
+
+            if let ShouldPanic::No = test.desc.should_panic {
+                return Err(format!(
+                    "Test panicked unexpectedly.\n\n{}\n\n",
+                    String::from_utf8_lossy(&stdout_buffer)
+                ));
+            } else {
+                return Ok(true);
+            }
+        }
+
         match (child.try_wait(), &test.desc.should_panic) {
             (Ok(None), _) => {}
             (Ok(Some(status)), ShouldPanic::No) => {
                 if status.success() {
                     return Ok(true);
                 } else {
-                    return Err(format!("Test failed with exit code: {:?}", status));
+                    return Err(format!(
+                        "Test failed with exit code: {:?}\n\n{}\n\n",
+                        status,
+                        String::from_utf8_lossy(&stdout_buffer)
+                    ));
                 }
             }
             (Ok(Some(status)), ShouldPanic::Yes | ShouldPanic::YesWithMessage(_)) => {
                 if status.success() {
-                    return Err("Test did not panic as expected".to_string());
+                    return Err(format!(
+                        "Test did not panic as expected.\n\n{}\n\n",
+                        String::from_utf8_lossy(&stdout_buffer)
+                    ));
                 } else {
                     return Ok(true);
                 }
             }
-            (Err(e), _) => return Err(format!("Failed to wait for cargo process: {}", e)),
+            (Err(e), _) => {
+                return Err(format!(
+                    "Failed to wait for cargo process: {}\n\n{}",
+                    e,
+                    String::from_utf8_lossy(&stdout_buffer)
+                ))
+            }
         }
 
-        // Modified timeout handling code
         if start_time.elapsed() >= timeout {
-            child
-                .kill()
-                .map_err(|e| format!("Failed to kill test process: {}", e))?;
+            let _ = child.kill();
 
             match &test.desc.should_panic {
                 ShouldPanic::No => {
-                    return Err(format!("Test timed out after {:?}", timeout));
+                    return Err(format!(
+                        "Test timed out after {:?}\n\n{}",
+                        timeout,
+                        String::from_utf8_lossy(&stdout_buffer)
+                    ));
                 }
                 ShouldPanic::Yes | ShouldPanic::YesWithMessage(_) => {
                     return Ok(true);
@@ -431,6 +484,12 @@ fn run_test_on_valida_inner(
 // Run's a single specified test.
 // Get's the test name from first line of input.
 fn run_single_test_in_valida(tests: &[&TestDescAndFn]) {
+    std::panic::set_hook(Box::new(|panic_info| {
+        crate::io::println(&format!("Panic: {:?}", panic_info));
+
+        crate::io::println(MAGIC_TERMINATOR);
+    }));
+
     crate::io::print("Available tests:");
     for t in tests.iter() {
         crate::io::print(&format!(" ({}, {})", t.desc.name, t.desc.source_file))
@@ -439,7 +498,6 @@ fn run_single_test_in_valida(tests: &[&TestDescAndFn]) {
 
     let Ok(test_name) = crate::io::read_line::<String>() else {
         // If no test name is provided the program will hang.
-        // This is an upstream issue with read_line.
         return;
     };
 
@@ -458,7 +516,7 @@ fn run_single_test_in_valida(tests: &[&TestDescAndFn]) {
         // return 0 or 1 exit code based on test outcome
         // there's no point in doing this now since panic will cause an infinite loop
         // The loop has to be detected by the host test runner.
-        // If the test takes 10x longer than expected, we can assume it has panicked.
+        // If the test takes 20x longer than expected, we can assume it has panicked.
         //
         // TODO support other test types
         if let TestFn::StaticTestFn(f) = test.testfn {
@@ -469,6 +527,42 @@ fn run_single_test_in_valida(tests: &[&TestDescAndFn]) {
 
 fn valida_test_second_line_stdout(test: &TestDescAndFn) -> String {
     format!("Running test: {} in valida vm", test.desc.name)
+}
+
+/// Read from a reader extending the vec until the reader would block
+pub fn read_extend_vec(vec: &mut Vec<u8>, reader: &mut impl Read) -> io::Result<usize> {
+    let mut total_read = 0;
+    loop {
+        if vec.len() == vec.capacity() {
+            let new_capacity = std::cmp::max(vec.capacity() + vec.capacity() / 4, 1048);
+            vec.reserve(new_capacity - vec.capacity());
+        }
+
+        let start = vec.len();
+        vec.resize(vec.capacity(), 0);
+
+        match reader.read(&mut vec[start..]) {
+            Ok(0) => {
+                // No more data available
+                vec.truncate(start);
+                break;
+            }
+            Ok(n) => {
+                // Truncate to actual read size
+                vec.truncate(start + n);
+                total_read += n;
+            }
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                vec.truncate(start);
+                break;
+            }
+            Err(e) => {
+                vec.truncate(start);
+                return Err(e);
+            }
+        }
+    }
+    Ok(total_read)
 }
 
 #[test]
