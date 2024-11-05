@@ -20,3 +20,12 @@ fn test_integration_ignore() {
     valida_rs::io::println("Running integration test ignore...");
     assert_eq!(1 + 1, 3);
 }
+
+#[test]
+#[ignore]
+fn test_panics_on_valida() {
+    #[allow(unexpected_cfgs)]
+    if cfg!(target_arch = "delendum") {
+        panic!("This test will panic on valida, but not on the native host");
+    }
+}

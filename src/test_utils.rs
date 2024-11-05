@@ -23,22 +23,32 @@
 
 extern crate test;
 
-use std::io::Read;
 #[cfg_attr(target_arch = "delendum", allow(unused_imports))]
 use std::{
     env,
-    io::{self, BufRead, Seek, Write},
+    io::{BufRead, Seek, Write},
     panic::{self, AssertUnwindSafe},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     time::{Duration, Instant},
+};
+use std::{
+    io::Read,
+    mem,
+    ops::{Deref, DerefMut},
+    process::Child,
+    sync::mpsc,
 };
 #[cfg_attr(target_arch = "delendum", allow(unused_imports))]
 use test::{ShouldPanic, TestDescAndFn, TestFn};
 
 /// A random sentinel value is printed by the panic hook.
 /// This is used to detect if a test running in valida has panicked.
-pub const MAGIC_TERMINATOR: &str = "valida_rs_terminator_YMYGE2otWHIAZ5IKtvTkCnt7B/aNTisJtmkNu9/H0C2pZp7XTeGIO2RZypwus7wvKyG9f4/nwrEP1vEy+YJJqS6ulJqks25EgHbZXQIZIWVfVK+HgmFvaINl49axeKZgk2SNIDAayGhmO5a0okHc9qFzOZhDIblXdybCoVCVaZfX/5G9T4FbbX8ktLV0nLI/nns1fakApi2eHTxP/+lWlXFznl+eipFNQg9h3ZS7VX6i3EGTOYO86TJmAUyLAfqKWuQFTvNHeFFofd4nhUiek2FuI939T3L5uFc7A9oQClGmLTSaGytDNT8slxuaRvQM99ntk+CLK+X8eNVQdKh0xA";
+pub const MAGIC_TERMINATOR: &str = "\n\n\n\nvalida_rs_panic_terminator_YMYGE2otWHIAZ5IKtvT\
+kCnt7B/aNTisJtmkNu9/H0C2pZp7XTeGIO2RZypwus7wvKyG9f4/nwrEP1vEy+YJJqS6ulJqks25EgHbZXQIZIWVfVK\
++HgmFvaINl49axeKZgk2SNIDAayGhmO5a0okHc9qFzOZhDIblXdybCoVCVaZfX/5G9T4FbbX8ktLV0nLI/nns1fakAp\
+i2eHTxP/+lWlXFznl+eipFNQg9h3ZS7VX6i3EGTOYO86TJmAUyLAfqKWuQFTvNHeFFofd4nhUiek2FuI939T3L5uFc7\
+A9oQClGmLTSaGytDNT8slxuaRvQM99ntk+CLK+X8eNVQdKh0xA\n\n\n\n";
 
 pub fn test_runner(tests: &[&TestDescAndFn]) {
     #[allow(unexpected_cfgs)]
@@ -135,6 +145,8 @@ fn host_runner(tests: &[&TestDescAndFn]) {
         }
     }
 
+    let test_result = failed == 0 && valida_failed == 0;
+
     if filtered_tests.is_empty() && filter.is_some() {
         println!("\nno tests matched filter '{}'", filter.unwrap());
     } else {
@@ -144,11 +156,13 @@ fn host_runner(tests: &[&TestDescAndFn]) {
             on valida:      {valida_passed} passed; {valida_failed} failed\n\
             {ignored} ignored;\n\
             {unsupported} unsupported\n\n",
-            if failed == 0 { "ok" } else { "FAILED" },
+            if test_result { "ok" } else { "FAILED" },
         );
     }
 
-    if failed > 0 || valida_failed > 0 {
+    if test_result {
+        std::process::exit(0);
+    } else {
         std::process::exit(1);
     }
 }
@@ -364,8 +378,10 @@ fn run_test_on_valida_inner(
         .map_err(|e| {
             panic!("Are you sure `valida` is in your `$PATH`?\nFailed to start test process: {e}")
         })
+        .map(ScopedChild)
         .unwrap();
 
+    // unwrap is safe because we know the stdin is piped
     let mut valida_stdin = child.stdin.take().unwrap();
 
     // The pipe may break if the process exits before we write to it.
@@ -373,40 +389,29 @@ fn run_test_on_valida_inner(
     let _ = writeln!(valida_stdin, "{}", test.desc.name);
     let _ = writeln!(valida_stdin, "{}", test.desc.source_file);
 
-    let mut valida_stdout = io::BufReader::new(child.stdout.take().unwrap());
+    // unwrap is safe because we know the stdout is piped
+    let valida_stdout = child.stdout.take().unwrap();
+    let mut valida_stdout_stream = non_blocking_read(valida_stdout);
 
-    // contains a list of available tests
-    let mut first_line = String::new();
-    let Ok(_) = valida_stdout.read_line(&mut first_line) else {
-        return Err(format!(
-            "Failed to read available tests from first line of stdout for test executable {}",
-            test_path.display()
-        ));
-    };
+    let mut stdout_buffer: Vec<u8> = Vec::with_capacity(1024);
 
-    // the test you selected
-    let mut second_line = String::new();
-    let Ok(_) = valida_stdout.read_line(&mut second_line) else {
-        return Err(format!(
-            "Failed to read test name from second line of stdout for test executable {}",
-            test_path.display()
-        ));
-    };
-
-    if second_line.trim() != valida_test_second_line_stdout(test) {
+    if !check_test_started(&mut valida_stdout_stream, &mut stdout_buffer, test) {
         return Ok(false);
     }
 
     let timeout = std::cmp::max(host_test_time * 20, Duration::from_secs(10));
     let start_time = Instant::now();
 
-    let mut stdout_buffer: Vec<u8> = Vec::with_capacity(1024);
     let mut searched_cursor = 0;
 
+    let receive_child_stdout = |stdout_buffer: &mut Vec<u8>| {
+        while let Ok(segment) = valida_stdout_stream.try_recv() {
+            stdout_buffer.extend(segment);
+        }
+    };
+
     loop {
-        // Read stdout the valida child process
-        read_extend_vec(&mut stdout_buffer, &mut valida_stdout)
-            .expect("Failed to read child stdout");
+        receive_child_stdout(&mut stdout_buffer);
 
         let search_end = stdout_buffer
             .len()
@@ -418,53 +423,55 @@ fn run_test_on_valida_inner(
         searched_cursor = search_end;
 
         if paniced_with_magic_terminator {
-            let _ = child.kill();
-
             if let ShouldPanic::No = test.desc.should_panic {
+                // remove the magic terminator if it's the last thing in the buffer
+                // If somthing else is printed after the terminator,
+                // something is broken and I want to the full output.
+                let stdout_buffer = stdout_buffer
+                    .trim_ascii_end()
+                    .strip_suffix(MAGIC_TERMINATOR.as_bytes().trim_ascii_end())
+                    .unwrap_or(&stdout_buffer);
+
                 return Err(format!(
                     "Test panicked unexpectedly.\n\n{}\n\n",
-                    String::from_utf8_lossy(&stdout_buffer)
+                    String::from_utf8_lossy(stdout_buffer)
                 ));
             } else {
                 return Ok(true);
             }
         }
 
-        match (child.try_wait(), &test.desc.should_panic) {
-            (Ok(None), _) => {}
-            (Ok(Some(status)), ShouldPanic::No) => {
-                if status.success() {
-                    return Ok(true);
-                } else {
+        let Ok(child_status) = child.try_wait() else {
+            receive_child_stdout(&mut stdout_buffer);
+            return Err(format!(
+                "Failed to wait for cargo process.\n\n{}\n\n",
+                String::from_utf8_lossy(&stdout_buffer)
+            ));
+        };
+
+        if let Some(status) = child_status.map(|s| s.success()) {
+            receive_child_stdout(&mut stdout_buffer);
+
+            match (status, &test.desc.should_panic) {
+                (true, ShouldPanic::No) => return Ok(true),
+                (true, ShouldPanic::Yes | ShouldPanic::YesWithMessage(_)) => {
+                    return Err(format!(
+                        "Test did not panic as expected.\n\n{}\n\n",
+                        String::from_utf8_lossy(&stdout_buffer)
+                    ));
+                }
+                (false, ShouldPanic::No) => {
                     return Err(format!(
                         "Test failed with exit code: {:?}\n\n{}\n\n",
                         status,
                         String::from_utf8_lossy(&stdout_buffer)
                     ));
                 }
-            }
-            (Ok(Some(status)), ShouldPanic::Yes | ShouldPanic::YesWithMessage(_)) => {
-                if status.success() {
-                    return Err(format!(
-                        "Test did not panic as expected.\n\n{}\n\n",
-                        String::from_utf8_lossy(&stdout_buffer)
-                    ));
-                } else {
-                    return Ok(true);
-                }
-            }
-            (Err(e), _) => {
-                return Err(format!(
-                    "Failed to wait for cargo process: {}\n\n{}",
-                    e,
-                    String::from_utf8_lossy(&stdout_buffer)
-                ))
+                (false, ShouldPanic::Yes | ShouldPanic::YesWithMessage(_)) => return Ok(true),
             }
         }
 
         if start_time.elapsed() >= timeout {
-            let _ = child.kill();
-
             match &test.desc.should_panic {
                 ShouldPanic::No => {
                     return Err(format!(
@@ -481,15 +488,88 @@ fn run_test_on_valida_inner(
     }
 }
 
-// Run's a single specified test.
-// Get's the test name from first line of input.
-fn run_single_test_in_valida(tests: &[&TestDescAndFn]) {
-    std::panic::set_hook(Box::new(|panic_info| {
-        crate::io::println(&format!("Panic: {:?}", panic_info));
+struct ScopedChild(Child);
+
+impl Drop for ScopedChild {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+    }
+}
+
+impl Deref for ScopedChild {
+    type Target = Child;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for ScopedChild {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+/// Read in a non-blocking manner from a reader and return a receiver for the data.
+/// The thread will stop reading when the reader returns 0 bytes, an error occurs, or the receiver is dropped.
+#[must_use]
+fn non_blocking_read(mut reader: impl Read + Send + 'static) -> mpsc::Receiver<Vec<u8>> {
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut segment = vec![0; 256];
+
+        loop {
+            match reader.read(&mut segment) {
+                Ok(0) => break,
+                Ok(n) => {
+                    let mut seg = vec![0; 256];
+                    mem::swap(&mut segment, &mut seg);
+
+                    seg.truncate(n);
+                    if tx.send(seg).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => {
+                    break;
+                }
+            }
+        }
+    });
+
+    rx
+}
+
+fn set_panic_handler(test: &TestDescAndFn) {
+    let test_name = test.desc.name.clone();
+    let test_file = test.desc.source_file;
+    let test_line = test.desc.start_line;
+    let test_column = test.desc.start_col;
+
+    panic::set_hook(Box::new(move |info| {
+        let msg = match info.payload().downcast_ref::<&'static str>() {
+            Some(s) => *s,
+            None => match info.payload().downcast_ref::<String>() {
+                Some(s) => &s[..],
+                None => "Box<Any>",
+            },
+        };
+
+        let location = info.location().unwrap_or_else(|| panic::Location::caller());
+
+        let err = format!(
+            "\n\ntest '{test_name}' in {test_file}:{test_line}:{test_column} panicked at {location} with message:\n{msg}\n\n",
+        );
+
+        crate::io::println(&err);
 
         crate::io::println(MAGIC_TERMINATOR);
     }));
+}
 
+// Run's a single specified test.
+// Get's the test name from first line of input.
+fn run_single_test_in_valida(tests: &[&TestDescAndFn]) {
     crate::io::print("Available tests:");
     for t in tests.iter() {
         crate::io::print(&format!(" ({}, {})", t.desc.name, t.desc.source_file))
@@ -511,6 +591,8 @@ fn run_single_test_in_valida(tests: &[&TestDescAndFn]) {
         .find(|t| t.desc.name.as_slice() == test_name && t.desc.source_file == test_file);
 
     if let Some(test) = test {
+        set_panic_handler(test);
+
         crate::io::println(valida_test_second_line_stdout(test).as_str());
         // TODO catch panics once that works on valida
         // return 0 or 1 exit code based on test outcome
@@ -525,44 +607,43 @@ fn run_single_test_in_valida(tests: &[&TestDescAndFn]) {
     }
 }
 
-fn valida_test_second_line_stdout(test: &TestDescAndFn) -> String {
-    format!("Running test: {} in valida vm", test.desc.name)
-}
+#[must_use]
+fn check_test_started(
+    valida_stdout_stream: &mut mpsc::Receiver<Vec<u8>>,
+    valida_stdout_buffer: &mut Vec<u8>,
+    test: &TestDescAndFn,
+) -> bool {
+    let start_time = Instant::now();
+    let mut lines_seen = 0;
 
-/// Read from a reader extending the vec until the reader would block
-pub fn read_extend_vec(vec: &mut Vec<u8>, reader: &mut impl Read) -> io::Result<usize> {
-    let mut total_read = 0;
-    loop {
-        if vec.len() == vec.capacity() {
-            let new_capacity = std::cmp::max(vec.capacity() + vec.capacity() / 4, 1048);
-            vec.reserve(new_capacity - vec.capacity());
-        }
-
-        let start = vec.len();
-        vec.resize(vec.capacity(), 0);
-
-        match reader.read(&mut vec[start..]) {
-            Ok(0) => {
-                // No more data available
-                vec.truncate(start);
-                break;
+    while lines_seen < 2 && start_time.elapsed() < Duration::from_secs(5) {
+        match valida_stdout_stream.try_recv() {
+            Ok(data) => {
+                for byte in data.iter() {
+                    if *byte == b'\n' {
+                        lines_seen += 1;
+                    }
+                }
+                valida_stdout_buffer.extend(data);
             }
-            Ok(n) => {
-                // Truncate to actual read size
-                vec.truncate(start + n);
-                total_read += n;
-            }
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                vec.truncate(start);
-                break;
-            }
-            Err(e) => {
-                vec.truncate(start);
-                return Err(e);
-            }
+            Err(mpsc::TryRecvError::Empty) => std::thread::sleep(Duration::from_millis(10)),
+            // The reader thread has exited implying the child process has exited.
+            Err(mpsc::TryRecvError::Disconnected) => break,
         }
     }
-    Ok(total_read)
+
+    let stdout_str = String::from_utf8_lossy(valida_stdout_buffer);
+    let mut stdout_str = stdout_str.lines();
+
+    #[allow(clippy::match_like_matches_macro)]
+    match (stdout_str.next(), stdout_str.next()) {
+        (Some(_), Some(second_line)) if second_line == valida_test_second_line_stdout(test) => true,
+        _ => false,
+    }
+}
+
+fn valida_test_second_line_stdout(test: &TestDescAndFn) -> String {
+    format!("Running test: {} in valida vm", test.desc.name)
 }
 
 #[test]
