@@ -30,9 +30,11 @@ getrandom = "0.2.15" # or the current version
 rand = "0.8.5" # or the current version
 ```
 
-## The `io` library
+## The `IO` library
 
-This library provides common IO functions that work on Valida. See [io.rs](src/io.rs) for the full list of available functions. Note that not all stdlib IO functions are supported yet. Also, most of the Rust standard `std::io` module is not supported at the moment. If you use them, they may silently not work.
+This library provides common IO functions that work on Valida. See [io.rs](src/io.rs) for the full list of available functions. Note that not all standard library IO functions are supported yet. Also, most of the Rust standard `std::io` module is not supported at the moment. If you use them, they may silently not work.
+
+To use these functions, simply prefix them with `valida_rs::io::`. For example, `valida_rs::io::println` instead of `println`. You can see more examples in the [rust-examples](https://github.com/lita-xyz/rust-examples) repository.
 
 ### For projects with no other dependencies
 
