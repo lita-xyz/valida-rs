@@ -11,7 +11,7 @@ const PRNG_SEED: u64 = 0xdeadbeefdeadbeef;
 static mut RNG: OnceCell<StdRng> = OnceCell::new();
 
 /// Generates random bytes.
-pub fn delendum_rand(s: &mut [u8]) -> Result<(), getrandom::Error> {
+pub fn valida_rand(s: &mut [u8]) -> Result<(), getrandom::Error> {
     unsafe {
         let rng = RNG.get_mut_or_init(|| StdRng::seed_from_u64(PRNG_SEED));
         for i in 0..s.len() {
