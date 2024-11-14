@@ -14,7 +14,7 @@
 //! valida_rs::entrypoint!(main);
 //! ```
 //!
-//! You can run tests on only the host by setting the `VALIDA_TEST` environment variable to `0`.
+//! You can run tests on both the host and Valida by setting the `VALIDA_TEST` environment variable to `1`.
 //!
 //! # Caveats
 //! Testing examples, benchmarks, or any dynamic tests are not supported yet.
@@ -65,7 +65,7 @@ fn host_runner(tests: &[&TestDescAndFn]) {
     let run_tests_on_valida = env::var("VALIDA_TEST").map(|s| s.to_lowercase());
     let run_tests_on_valida = match run_tests_on_valida {
         Ok(val) => val == "1" || val == "true" || val == "yes" || val == "on",
-        Err(_) => true,
+        Err(_) => false,
     };
 
     let test_paths = if run_tests_on_valida {
