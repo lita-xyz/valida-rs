@@ -1,5 +1,5 @@
 [alias]
-valida = [
+valida_config = [
     "--config", 'build.target="delendum-unknown-baremetal-gnu"',
     "--config", 'target.delendum-unknown-baremetal-gnu.linker="/valida-toolchain/bin/ld.lld"',
     "--config", 'target.delendum-unknown-baremetal-gnu.runner="echo to run the code try valida run "',
