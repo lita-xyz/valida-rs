@@ -31,15 +31,6 @@ impl OutputTape {
     }
 }
 
-/// Mimic std::io::println
-pub fn println(s: &str) {
-    let length = s.len();
-    let bytes = s.as_bytes();
-    (0..length).for_each(|i| unsafe {
-        putchar(bytes[i] as u32);
-    });
-    unsafe { putchar('\n' as u32) };
-}
 /// Reads a single line of input from stdin and returns it as a generic type T.
 pub fn read_line<T>() -> Result<T, Box<dyn Error>>
 where
@@ -106,7 +97,7 @@ pub fn read_and_deserialize<T: DeserializeOwned>() -> Result<T, Box<dyn Error>> 
     let bytes = match read() {
         Ok(b) => b,
         Err(e) => {
-            println(&format!("Error reading bytes: {}", e));
+            println!("Error reading bytes: {}", e);
             return Err(e);
         }
     };
