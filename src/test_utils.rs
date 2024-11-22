@@ -23,7 +23,7 @@
 
 extern crate test;
 
-#[cfg_attr(target_arch = "delendum", allow(unused_imports))]
+#[cfg_attr(target_arch = "valida", allow(unused_imports))]
 use std::{
     env,
     io::{BufRead, Seek, Write},
@@ -39,7 +39,7 @@ use std::{
     process::Child,
     sync::mpsc,
 };
-#[cfg_attr(target_arch = "delendum", allow(unused_imports))]
+#[cfg_attr(target_arch = "valida", allow(unused_imports))]
 use test::{ShouldPanic, TestDescAndFn, TestFn};
 
 /// A random sentinel value is printed by the panic hook.
@@ -52,15 +52,15 @@ A9oQClGmLTSaGytDNT8slxuaRvQM99ntk+CLK+X8eNVQdKh0xA\n\n\n\n";
 
 pub fn test_runner(tests: &[&TestDescAndFn]) {
     #[allow(unexpected_cfgs)]
-    if cfg!(target_arch = "delendum") | cfg!(target = "valida") {
+    if cfg!(target_arch = "valida") | cfg!(target = "valida") {
         run_single_test_in_valida(tests);
     } else {
-        #[cfg(not(target_arch = "delendum"))]
+        #[cfg(not(target_arch = "valida"))]
         host_runner(tests);
     }
 }
 
-#[cfg(not(target_arch = "delendum"))]
+#[cfg(not(target_arch = "valida"))]
 fn host_runner(tests: &[&TestDescAndFn]) {
     let run_tests_on_valida = env::var("VALIDA_TEST").map(|s| s.to_lowercase());
     let run_tests_on_valida = match run_tests_on_valida {
@@ -175,7 +175,7 @@ pub enum TestOutcome {
     Unsupported,
 }
 
-#[cfg(not(target_arch = "delendum"))]
+#[cfg(not(target_arch = "valida"))]
 fn run_test_on_host(test: &TestDescAndFn) -> TestOutcome {
     use std::os::fd::AsRawFd;
 
@@ -260,27 +260,27 @@ fn run_test_on_host(test: &TestDescAndFn) -> TestOutcome {
 ///
 /// # Panics
 /// This function will panic if the cargo cannot build the tests.
-#[cfg(not(target_arch = "delendum"))]
+#[cfg(not(target_arch = "valida"))]
 fn build_tests_for_valida() -> Vec<PathBuf> {
     let mut command = Command::new("cargo");
 
     command
     .arg("+valida")
     .arg("test")
-    .arg("--target=delendum-unknown-baremetal-gnu")
+    .arg("--target=valida-unknown-baremetal-gnu")
     .arg("--config")
-    .arg("build.target=\"delendum-unknown-baremetal-gnu\"")
+    .arg("build.target=\"valida-unknown-baremetal-gnu\"")
     .arg("--config")
-    .arg("target.delendum-unknown-baremetal-gnu.runner=\"echo\"")
+    .arg("target.valida-unknown-baremetal-gnu.runner=\"echo\"")
     .arg("--config") 
-    .arg("target.delendum-unknown-baremetal-gnu.linker=\"/valida-toolchain/bin/ld.lld\"")
+    .arg("target.valida-unknown-baremetal-gnu.linker=\"/valida-toolchain/bin/ld.lld\"")
     .arg("--config")
      .arg(concat!(
-        "target.delendum-unknown-baremetal-gnu.rustflags=[",
+        "target.valida-unknown-baremetal-gnu.rustflags=[",
         "\"-C\",\"link-arg=/valida-toolchain/DelendumEntryPoint.o\",",
         "\"-C\",\"link-arg=--script=/valida-toolchain/valida.ld\",",
-        "\"-C\",\"link-arg=/valida-toolchain/lib/delendum-unknown-baremetal-gnu/libc.a\",",
-        "\"-C\",\"link-arg=/valida-toolchain/lib/delendum-unknown-baremetal-gnu/libm.a\",",
+        "\"-C\",\"link-arg=/valida-toolchain/lib/valida-unknown-baremetal-gnu/libc.a\",",
+        "\"-C\",\"link-arg=/valida-toolchain/lib/valida-unknown-baremetal-gnu/libm.a\",",
         "\"-C\",\"link-arg=--noinhibit-exec\"",
         "]"
     ))
@@ -319,7 +319,7 @@ fn build_tests_for_valida() -> Vec<PathBuf> {
     }
 }
 
-#[cfg(not(target_arch = "delendum"))]
+#[cfg(not(target_arch = "valida"))]
 fn run_test_on_valida(
     test: &TestDescAndFn,
     test_paths: &[PathBuf],
@@ -356,7 +356,7 @@ fn run_test_on_valida(
 /// # Panics
 /// If the `valida` command cannot be found in the `$PATH`.
 /// Or if the `valida` command cannot be started.
-#[cfg(not(target_arch = "delendum"))]
+#[cfg(not(target_arch = "valida"))]
 fn run_test_on_valida_inner(
     test: &TestDescAndFn,
     test_path: &Path,
