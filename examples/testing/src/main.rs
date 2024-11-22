@@ -11,7 +11,7 @@
 valida_rs::entrypoint!(main);
 
 fn main() {
-    valida_rs::io::println("Hello world!");
+    println!("Hello world!");
 }
 
 #[test]

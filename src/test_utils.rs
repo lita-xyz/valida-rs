@@ -561,20 +561,20 @@ fn set_panic_handler(test: &TestDescAndFn) {
             "\n\ntest '{test_name}' in {test_file}:{test_line}:{test_column} panicked at {location} with message:\n{msg}\n\n",
         );
 
-        crate::io::println(&err);
+        println!("{}", &err);
 
-        crate::io::println(MAGIC_TERMINATOR);
+        println!("{MAGIC_TERMINATOR}");
     }));
 }
 
 // Run's a single specified test.
 // Get's the test name from first line of input.
 fn run_single_test_in_valida(tests: &[&TestDescAndFn]) {
-    crate::io::print("Available tests:");
+    print!("Available tests:");
     for t in tests.iter() {
-        crate::io::print(&format!(" ({}, {})", t.desc.name, t.desc.source_file))
+        print!(" ({}, {})", t.desc.name, t.desc.source_file)
     }
-    crate::io::println("");
+    println!();
 
     let Ok(test_name) = crate::io::read_line::<String>() else {
         // If no test name is provided the program will hang.
@@ -593,7 +593,7 @@ fn run_single_test_in_valida(tests: &[&TestDescAndFn]) {
     if let Some(test) = test {
         set_panic_handler(test);
 
-        crate::io::println(valida_test_second_line_stdout(test).as_str());
+        println!("{}", valida_test_second_line_stdout(test).as_str());
         // TODO catch panics once that works on valida
         // return 0 or 1 exit code based on test outcome
         // there's no point in doing this now since panic will cause an infinite loop
