@@ -1,6 +1,6 @@
 # valida-rs
 
-This crate is to be used as a dependency in a Valida project. It provides the entry point for the program and an IO library that works on Valida.
+This crate is to be used as a dependency in a Valida project. It provides the entry point for the program and an IO library that works on Valida. This version is tested to be compatible with `valida-toolchain` v0.7.0-alpha.
 
 ## The `entrypoint!` macro
 
@@ -25,7 +25,7 @@ Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-valida-rs = { git = "https://github.com/lita-xyz/valida-rs.git", branch = "main" }
+valida-rs = { git = "https://github.com/lita-xyz/valida-rs.git", tag = "v0.7.0-alpha" }
 getrandom = "0.2.15" # or the current version
 rand = "0.8.5" # or the current version
 ```
@@ -42,7 +42,7 @@ To use this branch, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-valida-rs = { git = "https://github.com/lita-xyz/valida-rs.git", branch = "no-deps" }
+valida-rs = { git = "https://github.com/lita-xyz/valida-rs.git", tag = "v0.7.0-alpha-no-deps" }
 ```
 
 Also, in your `src/main.rs`, add the following:
