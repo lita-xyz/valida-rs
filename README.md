@@ -57,3 +57,7 @@ pub fn main() {
 ```
 
 The `#[no_mangle]` attribute tells the compiler not to mangle (rename) the function name during compilation. We need this because the Valida runtime looks for a function specifically named "main".
+
+## Issue reporting
+
+Any issues report at https://github.com/lita-xyz/valida-releases/issues
