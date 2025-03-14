@@ -106,13 +106,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "testing"
-version = "0.1.0"
-dependencies = [
- "valida-rs",
-]
-
-[[package]]
 name = "unicode-ident"
 version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"

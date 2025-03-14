@@ -4,7 +4,6 @@ resolver = "2"
 
 members = [
     ".",
-    "examples/testing",
 ]
 
 [package]
